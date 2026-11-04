@@ -317,7 +317,7 @@ export function Drawer({ prospect: p, prospects, onUpdate, onReload, onClose }: 
 
   /** Fecha a ficha junto se o descarte for confirmado -- não sobra ficha aberta de um prospect morto. */
   async function handleDiscard(note: string) {
-    const ok = await onUpdate(p.id, discardPatch(p, note))
+    const ok = await onUpdate(p.id, discardPatch(p, note), undefined, { confirmed: true })
     if (ok) onClose()
   }
 

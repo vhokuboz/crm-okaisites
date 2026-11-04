@@ -14,7 +14,13 @@ type State = {
 }
 
 /** `undoLabel` ("Marcado como contatado") liga o aviso com Desfazer apos salvar. */
-export type OnUpdate = (id: string, patch: ProspectUpdate, undoLabel?: string) => Promise<boolean>
+/** `confirmed`: o chamador já pediu confirmação ao usuário (ex.: DiscardModal), então não repete o confirm nativo. */
+export type OnUpdate = (
+  id: string,
+  patch: ProspectUpdate,
+  undoLabel?: string,
+  opts?: { confirmed?: boolean },
+) => Promise<boolean>
 
 /** Aplica o mesmo tipo de mudanca a varios prospects; devolve quantos foram salvos. */
 export type OnUpdateMany = (
@@ -54,7 +60,7 @@ export function useProspects() {
    * anterior se o banco recusar (uma policy negando, por exemplo). Devolve
    * tambem o patch que desfaz a escrita.
    */
-  const write = useCallback(async (id: string, patch: ProspectUpdate): Promise<WriteResult> => {
+  const write = useCallback(async (id: string, patch: ProspectUpdate, confirmed = false): Promise<WriteResult> => {
     const previous = ref.current.find((p) => p.id === id)
     if (previous && patch.status === 'contatado' && !canEnterContatado(previous)) {
       setState((s) => ({ ...s, error: `"${previous.name}" já passou de Contatado e não pode voltar.` }))
@@ -62,7 +68,7 @@ export function useProspects() {
     }
     const hosted = !!previous && closesHostedSite(previous, patch)
 
-    if (previous && hosted) {
+    if (previous && hosted && !confirmed) {
       const ok = window.confirm(
         `Isso vai apagar a hospedagem do site de "${previous.name}" no Cloudflare Pages. Confirmar?`,
       )
@@ -127,8 +133,8 @@ export function useProspects() {
   }, [])
 
   const update = useCallback<OnUpdate>(
-    async (id, patch, undoLabel) => {
-      const r = await write(id, patch)
+    async (id, patch, undoLabel, opts) => {
+      const r = await write(id, patch, opts?.confirmed)
       // Escrita que apaga hospedagem nao tem volta: sem Desfazer.
       if (r.ok && undoLabel && r.revert && !r.hosted) {
         const revert = r.revert

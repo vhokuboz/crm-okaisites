@@ -177,7 +177,7 @@ export function ProspectCard({
       status: 'descartado',
       next_action_at: null,
       notes: note ? (p.notes ? `${p.notes}\n\n${note}` : note) : p.notes,
-    }, `${p.name} descartado`)
+    }, `${p.name} descartado`, { confirmed: true })
   }
 
   return (
