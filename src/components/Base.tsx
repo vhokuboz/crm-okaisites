@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { Prospect } from '../lib/database.types'
 import {
   ALL_STATUS,
+  CLOSED,
   RISK_LABEL,
   RISK_TONE,
   STATUS_LABEL,
@@ -96,6 +97,9 @@ function BaseList({ onOpen }: Props) {
             tone={STATUS_TONE[s]}
           >
             {STATUS_LABEL[s]}
+            {!CLOSED.includes(s) && (
+              <> <span className="opacity-60">{meta.data?.statusCounts[s] ?? 0}</span></>
+            )}
           </Pill>
         ))}
       </div>

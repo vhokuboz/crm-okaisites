@@ -22,16 +22,24 @@ type LightRow = OpportunityInput & {
 
 const LIGHT_COLUMNS = 'id, name, segment, problem, notes, google_rating, website_quality, website'
 
-/** Segmentos e total da base inteira, independente dos filtros ativos (pra montar os pills). */
+/** Segmentos, contagem por status e total da base inteira, independente dos filtros ativos (pra montar os pills). */
 export function useBaseMeta() {
   return useQuery({
     queryKey: ['base-meta'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('prospects').select('segment')
+      const { data, error } = await supabase.from('prospects').select('segment, status')
       if (error) throw error
       const counts = new Map<string, number>()
-      for (const { segment } of data) counts.set(segment, (counts.get(segment) ?? 0) + 1)
-      return { total: data.length, segments: [...counts.entries()].sort((a, b) => b[1] - a[1]) }
+      const statusCounts: Record<string, number> = {}
+      for (const { segment, status } of data) {
+        counts.set(segment, (counts.get(segment) ?? 0) + 1)
+        statusCounts[status] = (statusCounts[status] ?? 0) + 1
+      }
+      return {
+        total: data.length,
+        segments: [...counts.entries()].sort((a, b) => b[1] - a[1]),
+        statusCounts,
+      }
     },
     staleTime: 60_000,
   })
