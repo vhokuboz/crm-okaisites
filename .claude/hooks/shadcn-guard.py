@@ -8,6 +8,10 @@
   ACRESCENTA marcação de primitivo feita à mão (role="tooltip", <dialog,
   aria-haspopup...) -> bloqueado. Mexer em marcação que já estava no trecho
   original (os modais atuais) passa.
+- Bash que escreve em .tsx/.jsx de src/ (redirecionamento, tee, sed -i,
+  perl -i, cp/mv, script python/node que grava arquivo) -> bloqueado: código
+  de componente passa por Edit/Write, onde as regras acima valem. Exceção:
+  o próprio `npx shadcn ... add`.
 Saída: o marcador `shadcn: sem equivalente` no texto novo ou no arquivo
 (o agente procurou no MCP shadcn e nada serve).
 """
@@ -15,9 +19,35 @@ import json, os, re, sys
 
 data = json.load(sys.stdin)
 tool = data.get("tool_name")
+inp = data.get("tool_input", {})
+
+if tool == "Bash":
+    cmd = inp.get("command", "")
+    ALVO = r"""(?:\./)?(?:[\w./-]*/)?src/[\w./\[\]-]*\.[jt]sx\b"""
+    # comandos do shadcn (add/init/diff) escrevem em ui/ legitimamente
+    resto = re.sub(r"npx\s+(-y\s+)?shadcn@[\w.]+\s+[^;&|]*", "", cmd)
+    escrita = [
+        r">>?\s*['\"]?" + ALVO,                                   # > arquivo.tsx
+        r"\btee\b[^;&|]*" + ALVO,                                  # tee arquivo.tsx
+        r"\b(sed|perl)\b[^;&|]*\s-[a-zA-Z]*i[^;&|]*" + ALVO,       # sed -i / perl -pi
+        r"\b(cp|mv|install|rsync|ln)\b[^;&|]*" + ALVO + r"\s*($|[;&|])",  # destino .tsx
+        r"\b(cp|mv|install|rsync)\b[^;&|]*src/components/ui/?\s*($|[;&|])",  # destino ui/
+        r"\bawk\b[^;&|]*inplace[^;&|]*" + ALVO,
+    ]
+    script = re.search(ALVO, resto) and re.search(
+        r"(writeFile|appendFile|createWriteStream|write_text|open\([^)]*['\"][wa]\+?['\"]|fs\.write)", resto)
+    if any(re.search(e, resto) for e in escrita) or script:
+        print(
+            "Bloqueado: este comando grava código de componente (.tsx/.jsx em src/) pelo shell, "
+            "fora das regras do shadcn-guard. Use as ferramentas Edit/Write para alterar componentes, "
+            "e `npx shadcn@4.23.0 add <item>` para trazer primitivos novos.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    sys.exit(0)
+
 if tool not in ("Write", "Edit"):
     sys.exit(0)
-inp = data.get("tool_input", {})
 path = inp.get("file_path", "")
 root = os.environ.get("CLAUDE_PROJECT_DIR", data.get("cwd", ""))
 rel = os.path.relpath(path, root) if os.path.isabs(path) else path
