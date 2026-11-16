@@ -8,7 +8,7 @@ React 19, TanStack Query 5, Tailwind 4, Vite 7 e supabase-js mudaram de API depo
 
 Antes de escrever do zero um primitivo de interface (dialog, sheet/drawer, select, combobox, popover, tooltip, tabs, dropdown, toast), procure no MCP `shadcn` e instale com `npx shadcn@4.23.0 add <item>` — versão fixada, a mesma do `.mcp.json`. O item cai em `src/components/ui/`.
 
-O hook `.claude/hooks/shadcn-guard.py` recusa arquivo novo em `src/components/ui/` escrito à mão e arquivo novo com nome de primitivo fora dele. Se procurou no MCP e nenhum item serve, declare no arquivo `// shadcn: sem equivalente — <o que foi procurado>`.
+O hook `.claude/hooks/shadcn-guard.py` recusa arquivo novo em `src/components/ui/` escrito à mão, arquivo novo com nome de primitivo fora dele e edição que acrescenta marcação de primitivo feita à mão (`role="tooltip"`, `<dialog`, `aria-haspopup`…); mexer na marcação que já existe nos modais atuais passa. Se procurou no MCP e nenhum item serve, declare no arquivo `// shadcn: sem equivalente — <o que foi procurado>`.
 
 Os componentes de `src/components/` são escritos à mão e já funcionam: migrar um deles para shadcn só quando o pedido for essa migração.
 
