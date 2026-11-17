@@ -1,4 +1,4 @@
-import type { Prospect, ProspectStatus, ProspectUpdate } from './database.types'
+import type { Prospect, ProspectStatus, ProspectUpdate, VistoriaAchado } from './database.types'
 
 /* ---------------------------------------------------------------- datas ---
    next_action_at e prospected_at sao `date` no Postgres: chegam como
@@ -559,14 +559,35 @@ export function statusTransitionPatch(
 export type Queue = {
   /** Protótipo no ar e mensagem escrita: só falta enviar. Sai das outras listas. */
   proposal: Prospect[]
+  /** Pronto para enviar, mas a vistoria automática do preview achou erro: corrigir antes. */
+  review: Prospect[]
   overdue: Prospect[]
   today: Prospect[]
   unscheduled: Prospect[]
 }
 
-/** Pronto para encaminhar a proposta: prototipado, com mensagem de abordagem e URL do preview. */
-export function readyToSend(p: Prospect): boolean {
+function hasProposal(p: Prospect): boolean {
   return p.status === 'prototipado' && !!p.approach_message?.trim() && !!prototypeUrl(p)
+}
+
+/**
+ * Pronto para encaminhar a proposta: prototipado, com mensagem de abordagem e
+ * URL do preview, e sem reprovação na vistoria. Ainda não vistoriado (null)
+ * continua pronto: a vistoria roda no fim do lote e não pode esconder ninguém.
+ */
+export function readyToSend(p: Prospect): boolean {
+  return hasProposal(p) && p.vistoria_ok !== false
+}
+
+/** Proposta pronta, mas a vistoria achou erro (imagem quebrada, rolagem lateral...). */
+export function needsReview(p: Prospect): boolean {
+  return hasProposal(p) && p.vistoria_ok === false
+}
+
+/** Achados da última vistoria, erros primeiro. */
+export function vistoriaAchados(p: Pick<Prospect, 'vistoria_achados'>): VistoriaAchado[] {
+  const lista = Array.isArray(p.vistoria_achados) ? p.vistoria_achados : []
+  return [...lista].sort((a, b) => (a.severidade === b.severidade ? 0 : a.severidade === 'erro' ? -1 : 1))
 }
 
 export function buildQueue(prospects: Prospect[]): Queue {
@@ -581,9 +602,11 @@ export function buildQueue(prospects: Prospect[]): Queue {
       const db = b.next_action_at ?? '9999'
       return da !== db ? da.localeCompare(db) : byOpportunity(a, b)
     })
-  const open = all.filter((p) => !readyToSend(p))
+  const review = all.filter(needsReview).sort(byOpportunity)
+  const open = all.filter((p) => !readyToSend(p) && !needsReview(p))
   return {
     proposal,
+    review,
     overdue: open
       .filter((p) => p.next_action_at !== null && p.next_action_at < hoje)
       .sort((a, b) => (a.next_action_at ?? '').localeCompare(b.next_action_at ?? '')),

@@ -45,6 +45,7 @@ export function Hoje({ prospects, onUpdate, onUpdateMany, onOpen }: Props) {
   const [selected, setSelected] = useState<string[]>([])
   const searchRef = useRef<HTMLInputElement>(null)
   const [openProposal, toggleProposal] = useStoredOpen('proposta', true)
+  const [openReview, toggleReview] = useStoredOpen('vistoria-reprovou', true)
   const [openOverdue, toggleOverdue] = useStoredOpen('atrasados', true)
   const [openToday, toggleToday] = useStoredOpen('hoje', true)
   // O maior bloco e o menos urgente: comeca recolhido.
@@ -84,6 +85,7 @@ export function Hoje({ prospects, onUpdate, onUpdateMany, onOpen }: Props) {
   // "Marcar todos" so alcanca o que esta visivel.
   const allIds = [
     ...(show(openProposal) ? queue.proposal : []),
+    ...(show(openReview) ? queue.review : []),
     ...(show(openOverdue) ? queue.overdue : []),
     ...(show(openToday) ? queue.today : []),
     ...(show(openLater) ? laterShown : []),
@@ -223,6 +225,25 @@ export function Hoje({ prospects, onUpdate, onUpdateMany, onOpen }: Props) {
             ))}
           </CardGrid>
         </Section>
+
+        {/* Só aparece quando há reprovado: some sem deixar seção vazia na tela. */}
+        {queue.review.length > 0 && (
+          <Section
+            title="Vistoria reprovou"
+            count={queue.review.length}
+            open={show(openReview)}
+            onToggle={toggleReview}
+            empty=""
+            hint="A vistoria automática achou erro no preview. Corrija e a próxima vistoria (fim do lote) devolve o card para a proposta."
+            urgent
+          >
+            <CardGrid>
+              {queue.review.map((p) => (
+                <ProspectCard key={p.id} prospect={p} {...cardProps} selected={selected.includes(p.id)} />
+              ))}
+            </CardGrid>
+          </Section>
+        )}
 
         <Section
           title="Atrasados"

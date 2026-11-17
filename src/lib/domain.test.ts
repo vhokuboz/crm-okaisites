@@ -10,6 +10,8 @@ import {
   buildQueue,
   daysBetweenISO,
   readyToSend,
+  needsReview,
+  vistoriaAchados,
   statusTransitionPatch,
   canEnterContatado,
   discardPatch,
@@ -245,4 +247,27 @@ test('isCobrancaExpirada - 2 cobranças e retorno já passado', () => {
 test('discardPatch - anexa a nota às notas existentes', () => {
   assert.deepEqual(discardPatch({ notes: 'a' }, 'b'), { status: 'descartado', next_action_at: null, notes: 'a\n\nb' })
   assert.equal(discardPatch({ notes: null }, '').notes, null)
+})
+
+test('vistoria - reprovado sai de "pronto" e vai para revisão; sem vistoria continua pronto', () => {
+  assert.equal(readyToSend(ready({ vistoria_ok: null })), true)
+  assert.equal(readyToSend(ready({ vistoria_ok: true })), true)
+  assert.equal(readyToSend(ready({ vistoria_ok: false })), false)
+  assert.equal(needsReview(ready({ vistoria_ok: false })), true)
+  assert.equal(needsReview(ready({ vistoria_ok: false, approach_message: null })), false)
+  const q = buildQueue([ready({ id: 'ok', vistoria_ok: true }), ready({ id: 'ruim', vistoria_ok: false, next_action_at: addDaysISO(-1) })])
+  assert.deepEqual(q.proposal.map((p) => p.id), ['ok'])
+  assert.deepEqual(q.review.map((p) => p.id), ['ruim'])
+  assert.deepEqual(q.overdue.map((p) => p.id), [])
+})
+
+test('vistoriaAchados - erros antes de avisos, tolera nulo', () => {
+  assert.deepEqual(vistoriaAchados({ vistoria_achados: null }), [])
+  const a = vistoriaAchados({
+    vistoria_achados: [
+      { severidade: 'aviso', regra: 'og', mensagem: '' },
+      { severidade: 'erro', regra: 'img', mensagem: '' },
+    ],
+  })
+  assert.deepEqual(a.map((x) => x.regra), ['img', 'og'])
 })

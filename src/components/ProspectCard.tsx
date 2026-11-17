@@ -13,8 +13,10 @@ import {
   prototypeUrl,
   relativeDay,
 } from '../lib/domain'
-import { SNOOZE_OPTIONS, canContact, canRepeat, contactPatch, repeatPatch, snoozePatch } from '../lib/queueActions'
+import { SNOOZE_OPTIONS, abordagemKind, canContact, canRepeat, contactPatch, repeatPatch, snoozePatch } from '../lib/queueActions'
+import { AbordarPanel } from './AbordarPanel'
 import { BusinessStatusBadge } from './BusinessStatusBadge'
+import { VistoriaInfo } from './VistoriaInfo'
 import { DiscardModal } from './DiscardModal'
 import { GapMeter } from './GapMeter'
 import { CopiarCobranca } from './CopiarCobranca'
@@ -122,6 +124,9 @@ export function ProspectCard({
   // Segura cliques repetidos enquanto a gravacao nao volta ("cobrei de novo" somaria 2x).
   const [busy, setBusy] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
+  const [abordarOpen, setAbordarOpen] = useState(false)
+  // Com mensagem pronta (abordagem ou cobrança), a ação principal abre o painel "Abordar".
+  const abordar = abordagemKind(p)
   const proto = prototypeUrl(p)
   const overdue = tone === 'overdue'
   const lastActivity = lastSocialActivityLabel(p)
@@ -244,15 +249,26 @@ export function ProspectCard({
         <GapMeter prospect={p} compact />
       </div>
 
+      {p.status === 'prototipado' && <VistoriaInfo prospect={p} />}
+
       <div className="mt-auto space-y-2.5 rule-top pt-3.5">
         {/* Uma acao principal, larga e com texto, decidida pelo status. */}
-        {p.status === 'prototipado' && (
+        {abordar && !abordarOpen && (
+          <button onClick={() => setAbordarOpen(true)} disabled={busy} className={PRIMARY}>
+            {abordar === 'cobranca' ? <RepeatIcon size={14} /> : <ContactIcon size={14} />}
+            {abordar === 'cobranca' ? 'Cobrar' : 'Abordar'}
+          </button>
+        )}
+        {abordar && abordarOpen && (
+          <AbordarPanel prospect={p} onUpdate={onUpdate} onClose={() => setAbordarOpen(false)} />
+        )}
+        {p.status === 'prototipado' && !abordar && (
           <button onClick={markContacted} disabled={busy} className={PRIMARY}>
             <ContactIcon size={14} />
             {contactLabel}
           </button>
         )}
-        {podeCobrarDeNovo && (
+        {podeCobrarDeNovo && abordar !== 'cobranca' && (
           <button onClick={cobrarDeNovo} disabled={busy} className={PRIMARY}>
             <RepeatIcon size={14} />
             Cobrei de novo

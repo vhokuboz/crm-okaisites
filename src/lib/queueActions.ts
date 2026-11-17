@@ -1,5 +1,5 @@
-import { MAX_COBRANCAS, addBusinessDaysISO, addDaysISO, daysFromToday } from './domain.ts'
-import type { Prospect, ProspectUpdate } from './database.types.ts'
+import { MAX_COBRANCAS, addBusinessDaysISO, addDaysISO, daysFromToday, instagramHandle, whatsappUrl } from './domain.ts'
+import type { ContactChannel, Prospect, ProspectUpdate } from './database.types.ts'
 
 /** Adiar um prospect: a nova data de retorno, a partir de hoje. */
 export const SNOOZE_OPTIONS = [
@@ -82,4 +82,81 @@ export function matchesFilters(
   const q = plain(f.query.trim())
   if (!q) return true
   return plain(`${p.name} ${p.segment} ${p.city ?? ''}`).includes(q)
+}
+
+/* --------------------------------------------------------------- abordar --- */
+
+export const CHANNEL_LABEL: Record<ContactChannel, string> = {
+  whatsapp: 'WhatsApp',
+  instagram: 'Instagram',
+  email: 'E-mail',
+}
+
+type AbordarFields = Pick<
+  Prospect,
+  | 'status'
+  | 'next_action_at'
+  | 'contact_attempts'
+  | 'tratamento'
+  | 'landing_page_url'
+  | 'approach_message'
+  | 'name'
+  | 'city'
+  | 'whatsapp'
+  | 'contact'
+  | 'instagram'
+  | 'last_contact_channel'
+>
+
+/** Canais de mensagem que o registro tem: WhatsApp (número) e Instagram (handle). */
+export function availableChannels(p: AbordarFields): ContactChannel[] {
+  const out: ContactChannel[] = []
+  if (whatsappUrl(p as Prospect)) out.push('whatsapp')
+  if (instagramHandle(p.instagram)) out.push('instagram')
+  return out
+}
+
+/**
+ * Qual mensagem o "Abordar" envia agora: a cobrança quando o retorno venceu e
+ * ainda há cobranças, a abordagem quando o protótipo está pronto; null quando
+ * não há o que enviar (o card mostra os botões antigos).
+ */
+export function abordagemKind(p: AbordarFields): 'abordagem' | 'cobranca' | null {
+  if (canCopyCobranca(p)) return 'cobranca'
+  if (p.status === 'prototipado' && p.approach_message?.trim() && p.landing_page_url?.trim()) return 'abordagem'
+  return null
+}
+
+export function abordagemText(p: AbordarFields): string | null {
+  const kind = abordagemKind(p)
+  if (kind === 'cobranca') return cobrancaMessage(p)
+  if (kind === 'abordagem') return p.approach_message
+  return null
+}
+
+/**
+ * Canal sugerido: na cobrança, o outro canal em relação ao último contato
+ * (mesma mensagem na outra rede); no primeiro contato, WhatsApp quando houver.
+ */
+export function suggestedChannel(p: AbordarFields): ContactChannel | null {
+  const canais = availableChannels(p)
+  if (canais.length === 0) return null
+  if (abordagemKind(p) === 'cobranca' && p.last_contact_channel) {
+    const outro = canais.find((c) => c !== p.last_contact_channel)
+    if (outro) return outro
+  }
+  return canais[0]
+}
+
+/** DM do Instagram: abre a conversa com o perfil (no app, no celular). */
+export function instagramDmUrl(value: string | null): string | null {
+  const handle = instagramHandle(value)
+  return handle ? `https://ig.me/m/${handle.replace(/^@/, '')}` : null
+}
+
+/** Registrar o envio pelo "Abordar": contato (1ª vez) ou cobrança, sempre com o canal. */
+export function abordagemPatch(p: AbordarFields, channel: ContactChannel, now = new Date()): ProspectUpdate {
+  if (abordagemKind(p) === 'cobranca')
+    return { ...repeatPatch(p), last_contacted_at: now.toISOString(), last_contact_channel: channel }
+  return { ...contactPatch(p, now), last_contact_channel: channel }
 }

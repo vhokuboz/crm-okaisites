@@ -69,3 +69,66 @@ test('canCopyCobranca - exige retorno vencido, tratamento e link', () => {
   assert.equal(canCopyCobranca({ ...ok, tratamento: null }), false)
   assert.equal(canCopyCobranca({ ...ok, landing_page_url: null }), false)
 })
+
+/* --------------------------------------------------------------- abordar --- */
+import { abordagemKind, abordagemPatch, abordagemText, availableChannels, instagramDmUrl, suggestedChannel } from './queueActions.ts'
+
+const base = {
+  status: 'prototipado' as const,
+  next_action_at: null,
+  contact_attempts: 0,
+  tratamento: 'singular' as const,
+  landing_page_url: 'https://x.pages.dev',
+  approach_message: 'Oi! Montei uma amostra.',
+  name: 'Ana Souza',
+  city: 'Bauru/SP',
+  whatsapp: '5514999990000',
+  contact: null,
+  instagram: '@ana.souza',
+  last_contact_channel: null,
+}
+
+test('abordagemKind - abordagem no prototipado, cobrança no contatado vencido, null no resto', () => {
+  assert.equal(abordagemKind(base), 'abordagem')
+  assert.equal(abordagemKind({ ...base, approach_message: ' ' }), null)
+  const cobr = { ...base, status: 'contatado' as const, next_action_at: addDaysISO(-1) }
+  assert.equal(abordagemKind(cobr), 'cobranca')
+  assert.equal(abordagemKind({ ...cobr, next_action_at: addDaysISO(2) }), null)
+  assert.equal(abordagemKind({ ...cobr, contact_attempts: 2 }), null)
+})
+
+test('abordagemText - cobrança usa a mensagem de follow-up', () => {
+  assert.equal(abordagemText(base), base.approach_message)
+  const t = abordagemText({ ...base, status: 'contatado', next_action_at: addDaysISO(-1) })
+  assert.match(t ?? '', /Há alguns dias/)
+})
+
+test('availableChannels / suggestedChannel - WhatsApp primeiro, cobrança troca de canal', () => {
+  assert.deepEqual(availableChannels(base), ['whatsapp', 'instagram'])
+  assert.deepEqual(availableChannels({ ...base, whatsapp: null }), ['instagram'])
+  assert.equal(suggestedChannel(base), 'whatsapp')
+  const cobr = { ...base, status: 'contatado' as const, next_action_at: addDaysISO(-1), last_contact_channel: 'whatsapp' as const }
+  assert.equal(suggestedChannel(cobr), 'instagram')
+  assert.equal(suggestedChannel({ ...cobr, instagram: null }), 'whatsapp')
+  assert.equal(suggestedChannel({ ...base, whatsapp: null, instagram: null }), null)
+})
+
+test('instagramDmUrl - handle ou URL viram ig.me', () => {
+  assert.equal(instagramDmUrl('@ana.souza'), 'https://ig.me/m/ana.souza')
+  assert.equal(instagramDmUrl('https://instagram.com/ana.souza/'), 'https://ig.me/m/ana.souza')
+  assert.equal(instagramDmUrl(null), null)
+})
+
+test('abordagemPatch - 1º contato vira contatado; cobrança soma tentativa e grava o contato', () => {
+  const now = new Date('2026-11-17T12:00:00Z')
+  const p1 = abordagemPatch(base, 'whatsapp', now)
+  assert.equal(p1.status, 'contatado')
+  assert.equal(p1.last_contact_channel, 'whatsapp')
+  assert.equal(p1.last_contacted_at, now.toISOString())
+  const p2 = abordagemPatch({ ...base, status: 'contatado', next_action_at: addDaysISO(-1), contact_attempts: 1 }, 'instagram', now)
+  assert.equal(p2.status, undefined)
+  assert.equal(p2.contact_attempts, 2)
+  assert.equal(p2.next_action_at, addBusinessDaysISO(3))
+  assert.equal(p2.last_contact_channel, 'instagram')
+  assert.equal(p2.last_contacted_at, now.toISOString())
+})

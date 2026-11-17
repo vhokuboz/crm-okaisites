@@ -169,7 +169,9 @@ export function useProspects() {
     [write, showToast],
   )
 
-  // Descarte automático: roda uma vez, quando a primeira carga termina. Só vale com o CRM aberto.
+  // Descarte automático: quem descarta de verdade é private.descartar_sem_resposta() (pg_cron, 06h
+  // BRT, migração 20261117120000). Este sweep é a reserva: roda uma vez, quando a primeira carga
+  // termina, e só pega o que o cron ainda não pegou (ex.: o job falhou).
   const swept = useRef(false)
   useEffect(() => {
     if (state.loading || swept.current) return

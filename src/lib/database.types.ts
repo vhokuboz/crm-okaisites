@@ -45,6 +45,11 @@ export type Database = {
           service_started_at: string | null
           suspended_at: string | null
           tratamento: 'singular' | 'plural' | null
+          vistoria_at: string | null
+          vistoria_ok: boolean | null
+          vistoria_achados: VistoriaAchado[] | null
+          abordagem_print_url: string | null
+          last_contact_channel: ContactChannel | null
           google_cid: string | null
           google_last_review_at: string | null
           google_place_id: string | null
@@ -99,6 +104,11 @@ export type Database = {
           service_started_at?: string | null
           suspended_at?: string | null
           tratamento?: 'singular' | 'plural' | null
+          vistoria_at?: string | null
+          vistoria_ok?: boolean | null
+          vistoria_achados?: VistoriaAchado[] | null
+          abordagem_print_url?: string | null
+          last_contact_channel?: ContactChannel | null
           google_cid?: string | null
           google_last_review_at?: string | null
           google_place_id?: string | null
@@ -161,3 +171,9 @@ export type Database = {
 export type Prospect = Database['public']['Tables']['prospects']['Row']
 export type ProspectUpdate = Database['public']['Tables']['prospects']['Update']
 export type ProspectStatus = Database['public']['Enums']['prospect_status']
+
+/** Canal do contato registrado; a cobrança sugere o outro. */
+export type ContactChannel = 'whatsapp' | 'instagram' | 'email'
+
+/** Achado da vistoria automática do preview (agent-okaisites/prospeccao/scripts/vistoria-abordagem.mjs). */
+export type VistoriaAchado = { severidade: 'erro' | 'aviso'; regra: string; mensagem: string }
