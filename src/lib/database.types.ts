@@ -176,8 +176,8 @@ export type ProspectStatus = Database['public']['Enums']['prospect_status']
 
 /** Canal do contato registrado; a cobrança sugere o outro. */
 export type ContactChannel = 'whatsapp' | 'instagram' | 'email'
-/** Motivo da perda (check das migrações 20261117200000 e 20261117210000). Nulo = desconhecido. */
-export type LostReason = 'visualizou_sem_resposta' | 'sem_interesse'
+/** Motivo da perda/descarte (check da migração 20261117220000). sem_resposta = descarte automático. Nulo = desconhecido ou manual. */
+export type LostReason = 'visualizou_sem_resposta' | 'sem_interesse' | 'sem_resposta'
 
 /** Achado da vistoria automática do preview (agent-okaisites/prospeccao/scripts/vistoria-abordagem.mjs). */
 export type VistoriaAchado = { severidade: 'erro' | 'aviso'; regra: string; mensagem: string }

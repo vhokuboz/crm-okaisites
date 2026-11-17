@@ -472,7 +472,7 @@ export function isOpen(p: Prospect): boolean {
 /**
  * Cobranças permitidas em `contatado`; esgotadas e com o retorno vencido, o prospect é descartado.
  * Uma só: a abordagem vai por uma rede e a cobrança, 3 dias úteis depois, pela outra. Mesmo valor em
- * private.descartar_sem_resposta() (migração 20261117190000) e em resumo-abordagem.mjs.
+ * private.descartar_sem_resposta() (migração 20261117220000, que também grava lost_reason = sem_resposta) e em resumo-abordagem.mjs.
  */
 export const MAX_COBRANCAS = 1
 

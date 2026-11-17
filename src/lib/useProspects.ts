@@ -200,7 +200,10 @@ export function useProspects() {
     swept.current = true
     const items = state.prospects
       .filter(isCobrancaExpirada)
-      .map((p) => ({ id: p.id, patch: discardPatch(p, 'Descartado automaticamente: sem resposta à abordagem nem à cobrança.') }))
+      .map((p) => ({
+        id: p.id,
+        patch: { ...discardPatch(p, 'Descartado automaticamente: sem resposta à abordagem nem à cobrança.'), lost_reason: 'sem_resposta' as const },
+      }))
     if (items.length > 0) void updateMany(items, 'Descartados sem resposta')
   }, [state.loading, state.prospects, updateMany])
 
