@@ -7,6 +7,7 @@ import {
   addMonthsISO,
   canDiscard,
   closesHostedSite,
+  reopensHostedSite,
   buildQueue,
   daysBetweenISO,
   readyToSend,
@@ -235,11 +236,11 @@ test('canEnterContatado - só quem ainda não passou de contatado', () => {
   for (const s of ['briefing', 'finalizado', 'perdido', 'descartado']) assert.equal(canEnterContatado({ status: s as Prospect['status'] }), false, s)
 })
 
-test('isCobrancaExpirada - 2 cobranças e retorno já passado', () => {
-  const base = { status: 'contatado', contact_attempts: 2, next_action_at: addDaysISO(-1) } as const
+test('isCobrancaExpirada - 1 cobrança e retorno já passado', () => {
+  const base = { status: 'contatado', contact_attempts: 1, next_action_at: addDaysISO(-1) } as const
   assert.equal(isCobrancaExpirada(base), true)
   assert.equal(isCobrancaExpirada({ ...base, next_action_at: addDaysISO(0) }), false)
-  assert.equal(isCobrancaExpirada({ ...base, contact_attempts: 1 }), false)
+  assert.equal(isCobrancaExpirada({ ...base, contact_attempts: 0 }), false)
   assert.equal(isCobrancaExpirada({ ...base, status: 'briefing' }), false)
   assert.equal(isCobrancaExpirada({ ...base, next_action_at: null }), false)
 })
@@ -270,4 +271,16 @@ test('vistoriaAchados - erros antes de avisos, tolera nulo', () => {
     ],
   })
   assert.deepEqual(a.map((x) => x.regra), ['img', 'og'])
+})
+
+test('reopensHostedSite - encerrado com preview que volta ao funil: true', () => {
+  const desc = { ...fakeProspect('descartado', 0, 'https://preview-x.okaisites.com.br'), slug: 'x' } as Prospect
+  assert.equal(reopensHostedSite(desc, { status: 'briefing' }), true)
+  assert.equal(reopensHostedSite({ ...desc, status: 'perdido' } as Prospect, { status: 'contatado' }), true)
+  assert.equal(reopensHostedSite(desc, { status: 'perdido' }), false)
+  assert.equal(reopensHostedSite(desc, { notes: 'x' }), false)
+  assert.equal(reopensHostedSite({ ...desc, landing_page_url: null } as Prospect, { status: 'briefing' }), false)
+  assert.equal(reopensHostedSite({ ...desc, slug: null } as Prospect, { status: 'briefing' }), false)
+  assert.equal(reopensHostedSite({ ...desc, status: 'contatado' } as Prospect, { status: 'briefing' }), false)
+  assert.equal(reopensHostedSite({ ...desc, service_ended_at: '2026-10-01' } as Prospect, { status: 'briefing' }), false)
 })

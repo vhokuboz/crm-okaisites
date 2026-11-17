@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
-import { canEnterContatado, closesHostedSite, discardPatch, isCobrancaExpirada, statusTransitionPatch } from './domain'
+import { canEnterContatado, closesHostedSite, discardPatch, isCobrancaExpirada, reopensHostedSite, statusTransitionPatch } from './domain'
 import { serviceStartPatch } from './service'
 import type { Prospect, ProspectUpdate } from './database.types'
 
@@ -74,6 +74,15 @@ export function useProspects() {
       )
       if (!ok) return { ok: false, revert: null, hosted }
     }
+    // Descartado/perdido que respondeu depois: o descarte apagou o preview, então voltar ao funil
+    // republica a página (mesmo slug, mesma URL) pelo deploy de preview do agent-okaisites.
+    const reopens = !!previous && reopensHostedSite(previous, patch)
+    if (previous && reopens && !confirmed) {
+      const ok = window.confirm(
+        `"${previous.name}" volta para o funil. Republicar o preview do site (deploy de alguns minutos)?`,
+      )
+      if (!ok) return { ok: false, revert: null, hosted }
+    }
 
     const finalPatch: ProspectUpdate = previous
       ? serviceStartPatch(previous, statusTransitionPatch(previous, patch))
@@ -114,6 +123,19 @@ export function useProspects() {
             setState((s) => ({
               ...s,
               error: `Hospedagem não removida automaticamente: ${fnError.message}`,
+            }))
+          }
+        })
+    }
+
+    if (previous && reopens) {
+      void supabase.functions
+        .invoke('republicar-preview', { body: { slug: previous.slug } })
+        .then(({ error: fnError }) => {
+          if (fnError) {
+            setState((s) => ({
+              ...s,
+              error: `Preview não republicado automaticamente: ${fnError.message}`,
             }))
           }
         })
@@ -178,7 +200,7 @@ export function useProspects() {
     swept.current = true
     const items = state.prospects
       .filter(isCobrancaExpirada)
-      .map((p) => ({ id: p.id, patch: discardPatch(p, 'Descartado automaticamente: sem resposta após 2 cobranças.') }))
+      .map((p) => ({ id: p.id, patch: discardPatch(p, 'Descartado automaticamente: sem resposta à abordagem nem à cobrança.') }))
     if (items.length > 0) void updateMany(items, 'Descartados sem resposta')
   }, [state.loading, state.prospects, updateMany])
 

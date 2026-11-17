@@ -159,18 +159,17 @@ export function AbordarPanel({
         </button>
       </div>
 
-      <div className="flex gap-3">
-        {printUrl && !printFalhou ? (
-          <a href={printUrl} target="_blank" rel="noreferrer noopener" className="block w-20 shrink-0 overflow-hidden rounded-sm border border-rule">
-            <img src={printUrl} alt={`Print do preview de ${p.name}`} className="aspect-[390/844] w-full object-cover object-top" />
-          </a>
-        ) : (
-          <p className="w-20 shrink-0 rounded-sm border border-dashed border-rule p-1.5 text-meta text-muted">
-            {printFalhou ? 'Print não carregou' : 'Sem print: a vistoria ainda não rodou'}
-          </p>
-        )}
-        <p className="line-clamp-6 min-w-0 flex-1 whitespace-pre-line text-xs leading-relaxed text-ink/80">{text}</p>
-      </div>
+      {/* Print desktop (1440×900): largura toda do painel, a mensagem logo abaixo. */}
+      {printUrl && !printFalhou ? (
+        <a href={printUrl} target="_blank" rel="noreferrer noopener" className="block overflow-hidden rounded-sm border border-rule">
+          <img src={printUrl} alt={`Print do preview de ${p.name}`} className="aspect-[1440/900] w-full object-cover object-top" />
+        </a>
+      ) : (
+        <p className="rounded-sm border border-dashed border-rule p-2 text-meta text-muted">
+          {printFalhou ? 'Print não carregou' : 'Sem print: a vistoria ainda não rodou'}
+        </p>
+      )}
+      <p className="line-clamp-4 whitespace-pre-line text-xs leading-relaxed text-ink/80">{text}</p>
 
       {podeCompartilhar && (
         <button type="button" onClick={compartilhar} className={BTN_STRONG}>

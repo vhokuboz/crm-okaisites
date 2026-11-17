@@ -23,8 +23,7 @@ test('contactPatch - depois do contato soma 3 dias e mantém o status', () => {
 
 test('canRepeat - só contatado com retorno vencido ou de hoje e cobranças sobrando', () => {
   assert.equal(canRepeat({ status: 'contatado', next_action_at: addDaysISO(-1), contact_attempts: 0 }), true)
-  assert.equal(canRepeat({ status: 'contatado', next_action_at: addDaysISO(-1), contact_attempts: 1 }), true)
-  assert.equal(canRepeat({ status: 'contatado', next_action_at: addDaysISO(-1), contact_attempts: 2 }), false)
+  assert.equal(canRepeat({ status: 'contatado', next_action_at: addDaysISO(-1), contact_attempts: 1 }), false)
   assert.equal(canRepeat({ status: 'contatado', next_action_at: addDaysISO(2), contact_attempts: 0 }), false)
   assert.equal(canRepeat({ status: 'prototipado', next_action_at: addDaysISO(-1), contact_attempts: 0 }), false)
   assert.equal(canRepeat({ status: 'contatado', next_action_at: null, contact_attempts: 0 }), false)
@@ -94,7 +93,7 @@ test('abordagemKind - abordagem no prototipado, cobrança no contatado vencido, 
   const cobr = { ...base, status: 'contatado' as const, next_action_at: addDaysISO(-1) }
   assert.equal(abordagemKind(cobr), 'cobranca')
   assert.equal(abordagemKind({ ...cobr, next_action_at: addDaysISO(2) }), null)
-  assert.equal(abordagemKind({ ...cobr, contact_attempts: 2 }), null)
+  assert.equal(abordagemKind({ ...cobr, contact_attempts: 1 }), null)
 })
 
 test('abordagemText - cobrança usa a mensagem de follow-up', () => {
@@ -125,9 +124,9 @@ test('abordagemPatch - 1º contato vira contatado; cobrança soma tentativa e gr
   assert.equal(p1.status, 'contatado')
   assert.equal(p1.last_contact_channel, 'whatsapp')
   assert.equal(p1.last_contacted_at, now.toISOString())
-  const p2 = abordagemPatch({ ...base, status: 'contatado', next_action_at: addDaysISO(-1), contact_attempts: 1 }, 'instagram', now)
+  const p2 = abordagemPatch({ ...base, status: 'contatado', next_action_at: addDaysISO(-1), contact_attempts: 0 }, 'instagram', now)
   assert.equal(p2.status, undefined)
-  assert.equal(p2.contact_attempts, 2)
+  assert.equal(p2.contact_attempts, 1)
   assert.equal(p2.next_action_at, addBusinessDaysISO(3))
   assert.equal(p2.last_contact_channel, 'instagram')
   assert.equal(p2.last_contacted_at, now.toISOString())

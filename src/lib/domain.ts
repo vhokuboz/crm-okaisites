@@ -469,8 +469,12 @@ export function isOpen(p: Prospect): boolean {
   return !['finalizado', 'perdido', 'descartado'].includes(p.status)
 }
 
-/** Cobranças permitidas em `contatado`; esgotadas e com o retorno vencido, o prospect é descartado. */
-export const MAX_COBRANCAS = 2
+/**
+ * Cobranças permitidas em `contatado`; esgotadas e com o retorno vencido, o prospect é descartado.
+ * Uma só: a abordagem vai por uma rede e a cobrança, 3 dias úteis depois, pela outra. Mesmo valor em
+ * private.descartar_sem_resposta() (migração 20261117190000) e em resumo-abordagem.mjs.
+ */
+export const MAX_COBRANCAS = 1
 
 /** Quem já passou de `contatado` (ou foi encerrado) não volta a ele -- a contagem de cobranças recomeçaria. */
 export function canEnterContatado(p: Pick<Prospect, 'status'>): boolean {
@@ -515,6 +519,19 @@ export function closesHostedSite(previous: Prospect, patch: ProspectUpdate): boo
   const alreadyDown = !!previous.suspended_at || !!previous.service_ended_at
   const closesByService = !alreadyDown && (!!patch.suspended_at || !!patch.service_ended_at)
   return closesByStatus || closesByService
+}
+
+/**
+ * true quando um prospect encerrado (perdido/descartado) volta para o funil e
+ * tinha preview publicado: o descarte apagou o projeto no Cloudflare Pages, e
+ * quem respondeu depois precisa da página no ar de novo (republicar-preview).
+ * Cliente com serviço suspenso/encerrado não entra: isso é decisão de serviço.
+ */
+export function reopensHostedSite(previous: Prospect, patch: ProspectUpdate): boolean {
+  if (!previous.landing_page_url || !previous.slug) return false
+  if (!CLOSED.includes(previous.status)) return false
+  if (!patch.status || CLOSED.includes(patch.status)) return false
+  return !previous.suspended_at && !previous.service_ended_at
 }
 
 /**
