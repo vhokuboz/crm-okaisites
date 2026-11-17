@@ -13,7 +13,7 @@ import {
   prototypeUrl,
   relativeDay,
 } from '../lib/domain'
-import { SNOOZE_OPTIONS, abordagemKind, canContact, canRepeat, contactPatch, repeatPatch, snoozePatch } from '../lib/queueActions'
+import { SNOOZE_OPTIONS, abordagemKind, canContact, canMarkIgnored, canRepeat, contactPatch, ignoredPatch, repeatPatch, snoozePatch } from '../lib/queueActions'
 import { AbordarPanel } from './AbordarPanel'
 import { BusinessStatusBadge } from './BusinessStatusBadge'
 import { VistoriaInfo } from './VistoriaInfo'
@@ -79,6 +79,28 @@ function ClipboardCopyIcon({ size }: { size: number }) {
       <path d="M16 4h2a2 2 0 0 1 2 2v4" />
       <path d="M21 14H11" />
       <path d="m15 10-4 4 4 4" />
+    </svg>
+  )
+}
+
+/** Olho riscado: usado no "visualizou e não respondeu". */
+function EyeOffIcon({ size }: { size: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      aria-hidden
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+      <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+      <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+      <path d="m2 2 20 20" />
     </svg>
   )
 }
@@ -161,6 +183,12 @@ export function ProspectCard({
 
   function snooze(days: number, label: string) {
     void run(onUpdate(p.id, snoozePatch(days), `Adiado: ${label.toLowerCase()}`))
+  }
+
+  /** Viu a mensagem e não respondeu no prazo: perdido, sem cobrança na outra rede.
+   *  Com preview publicado, a gravação pede confirmação antes de apagar a hospedagem. */
+  function visualizouSemResposta() {
+    void run(onUpdate(p.id, ignoredPatch(), `${p.name} marcado como perdido`))
   }
 
   const podeCobrarDeNovo = canRepeat(p)
@@ -307,7 +335,7 @@ export function ProspectCard({
           {isOpen(p) && (
             <details data-menu className="relative">
               <summary
-                aria-label="Adiar ou descartar"
+                aria-label="Adiar ou encerrar"
                 className="hit grid h-9 w-9 cursor-pointer list-none place-items-center rounded-sm text-lg leading-none text-muted hover:bg-paper [&::-webkit-details-marker]:hidden"
               >
                 ···
@@ -324,6 +352,16 @@ export function ProspectCard({
                     {o.label}
                   </button>
                 ))}
+                {canMarkIgnored(p) && (
+                  <button
+                    onClick={visualizouSemResposta}
+                    disabled={busy}
+                    className="mt-1 flex w-full items-center gap-2 rounded-sm border-t border-rule px-2.5 py-2.5 text-left text-body text-seal-ink hover:bg-seal/10 disabled:opacity-50"
+                  >
+                    <EyeOffIcon size={14} />
+                    Visualizou e não respondeu
+                  </button>
+                )}
                 {canDiscard(p) && (
                   <button
                     onClick={() => setDiscardOpen(true)}

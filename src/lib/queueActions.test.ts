@@ -2,7 +2,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { addBusinessDaysISO, addDaysISO } from './domain.ts'
-import { canContact, canCopyCobranca, cobrancaMessage, canRepeat, contactPatch, matchesFilters, repeatPatch, snoozePatch } from './queueActions.ts'
+import { canContact, canCopyCobranca, canMarkIgnored, cobrancaMessage, canRepeat, contactPatch, ignoredPatch, matchesFilters, repeatPatch, snoozePatch } from './queueActions.ts'
+
+test('canMarkIgnored / ignoredPatch - só contatado, e vira perdido', () => {
+  assert.equal(canMarkIgnored({ status: 'contatado' }), true)
+  for (const status of ['prototipado', 'negociando', 'perdido', 'descartado'] as const)
+    assert.equal(canMarkIgnored({ status }), false)
+  assert.deepEqual(ignoredPatch(), { status: 'perdido' })
+})
 
 test('snoozePatch - agenda a partir de hoje', () => {
   assert.equal(snoozePatch(3).next_action_at, addDaysISO(3))

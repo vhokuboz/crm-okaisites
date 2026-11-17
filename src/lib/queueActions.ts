@@ -43,6 +43,18 @@ export function repeatPatch(p: Pick<Prospect, 'contact_attempts'>): ProspectUpda
   return { next_action_at: addBusinessDaysISO(3), contact_attempts: p.contact_attempts + 1 }
 }
 
+/**
+ * "Visualizou e não respondeu": viu a abordagem e deixou o prazo passar. Cobrar pela outra rede
+ * não muda isso, então vai direto para perdido (a transição limpa a data de retorno e o lembrete).
+ */
+export function canMarkIgnored(p: Pick<Prospect, 'status'>): boolean {
+  return p.status === 'contatado'
+}
+
+export function ignoredPatch(): ProspectUpdate {
+  return { status: 'perdido' }
+}
+
 /** Botão "Copiar cobrança": contatado com retorno vencido e já classificado como singular/plural. */
 export function canCopyCobranca(p: Pick<Prospect, 'status' | 'next_action_at' | 'contact_attempts' | 'tratamento' | 'landing_page_url'>): boolean {
   return canRepeat(p) && !!p.tratamento && !!p.landing_page_url
