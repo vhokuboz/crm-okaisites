@@ -53,6 +53,12 @@ test('statusTransitionPatch - entrar em contatado agenda 3 dias úteis à frente
   assert.equal(patch.next_action_at, addBusinessDaysISO(3))
 })
 
+test('statusTransitionPatch - voltar ao funil limpa o motivo da perda; ficar encerrado não', () => {
+  const perdido = { ...fakeProspect('perdido'), lost_reason: 'visualizou_sem_resposta' as const }
+  assert.equal(statusTransitionPatch(perdido, { status: 'negociando' }).lost_reason, null)
+  assert.equal(statusTransitionPatch(perdido, { status: 'descartado' }).lost_reason, undefined)
+})
+
 test('statusTransitionPatch - entrar em aguardando_pendencias agenda 2 dias corridos à frente', () => {
   const previous = fakeProspect('briefing')
   const patch = statusTransitionPatch(previous, { status: 'aguardando_pendencias' })

@@ -50,6 +50,7 @@ export type Database = {
           vistoria_achados: VistoriaAchado[] | null
           abordagem_print_url: string | null
           last_contact_channel: ContactChannel | null
+          lost_reason: LostReason | null
           google_cid: string | null
           google_last_review_at: string | null
           google_place_id: string | null
@@ -109,6 +110,7 @@ export type Database = {
           vistoria_achados?: VistoriaAchado[] | null
           abordagem_print_url?: string | null
           last_contact_channel?: ContactChannel | null
+          lost_reason?: LostReason | null
           google_cid?: string | null
           google_last_review_at?: string | null
           google_place_id?: string | null
@@ -174,6 +176,8 @@ export type ProspectStatus = Database['public']['Enums']['prospect_status']
 
 /** Canal do contato registrado; a cobrança sugere o outro. */
 export type ContactChannel = 'whatsapp' | 'instagram' | 'email'
+/** Motivo da perda (check da migração 20261117200000_lost_reason). */
+export type LostReason = 'visualizou_sem_resposta'
 
 /** Achado da vistoria automática do preview (agent-okaisites/prospeccao/scripts/vistoria-abordagem.mjs). */
 export type VistoriaAchado = { severidade: 'erro' | 'aviso'; regra: string; mensagem: string }

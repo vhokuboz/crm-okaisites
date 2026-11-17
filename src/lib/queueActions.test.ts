@@ -8,7 +8,7 @@ test('canMarkIgnored / ignoredPatch - só contatado, e vira perdido', () => {
   assert.equal(canMarkIgnored({ status: 'contatado' }), true)
   for (const status of ['prototipado', 'negociando', 'perdido', 'descartado'] as const)
     assert.equal(canMarkIgnored({ status }), false)
-  assert.deepEqual(ignoredPatch(), { status: 'perdido' })
+  assert.deepEqual(ignoredPatch(), { status: 'perdido', lost_reason: 'visualizou_sem_resposta' })
 })
 
 test('snoozePatch - agenda a partir de hoje', () => {

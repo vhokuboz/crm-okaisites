@@ -52,7 +52,7 @@ export function canMarkIgnored(p: Pick<Prospect, 'status'>): boolean {
 }
 
 export function ignoredPatch(): ProspectUpdate {
-  return { status: 'perdido' }
+  return { status: 'perdido', lost_reason: 'visualizou_sem_resposta' }
 }
 
 /** Botão "Copiar cobrança": contatado com retorno vencido e já classificado como singular/plural. */

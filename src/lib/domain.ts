@@ -568,6 +568,8 @@ export function statusTransitionPatch(
     merged.next_action_at = null
     merged.last_reminded_at = null
   }
+  // Voltou ao funil (respondeu depois): o motivo da perda deixa de valer; o histórico fica em prospect_events.
+  if (CLOSED.includes(previous.status) && !CLOSED.includes(patch.status)) merged.lost_reason = null
   return merged
 }
 
