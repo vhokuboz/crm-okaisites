@@ -25,10 +25,15 @@ Cloudflare Pages sem servidor nenhum.
 
 ## O funil
 
-`novo → prototipado → contatado → briefing → aguardando_pendencias →
+`novo → triagem → prototipado → contatado → briefing → aguardando_pendencias →
 refinamento → em_analise → entrega → aguardando_pagamento → finalizado`, mais
 `perdido` e `descartado` fora da esteira (alcançáveis a partir de qualquer
 etapa aberta, pelo seletor de status na ficha).
+
+**Triagem** é a fila do lote de sites do `agent-okaisites`: o prospect entra
+nela quando a busca de Instagram acha um perfil com post recente (ou quando a
+prospecção já achou o Instagram), e o `batch-sites` constrói o protótipo de
+quem está em `triagem` sem `landing_page_url`.
 
 **Prototipado** existe porque a criação do protótipo é feita por um agente à
 parte: separa quem já tem página publicada — e portanto está pronto para a
@@ -47,6 +52,18 @@ ou pela ficha):
 - Entrar em `contatado` agenda a próxima ação pra 3 dias úteis à frente.
   Quando o cliente responde, o vendedor move manualmente pra `briefing` —
   conversa de escopo e do que falta ele enviar.
+- Em `contatado` cabe **uma cobrança** (`MAX_COBRANCAS = 1`): a abordagem vai
+  por uma rede e a cobrança, 3 dias úteis depois, pela outra (o botão
+  Abordar/Cobrar sugere o canal). Sem resposta depois do retorno da cobrança, o
+  pg_cron das 06h BRT (`private.descartar_sem_resposta()`) descarta, grava
+  `lost_reason = 'sem_resposta'` e apaga o preview. Se a abordagem foi pelo
+  WhatsApp e ficou visualizada sem resposta, o item **"Visualizou e não
+  respondeu"** do menu `···` do card marca `perdido` com `lost_reason =
+  'visualizou_sem_resposta'`, sem cobrança.
+- `lost_reason` (`visualizou_sem_resposta`, `sem_interesse`, `sem_resposta`)
+  registra o motivo da perda para tracking; nulo = desconhecido ou descarte
+  manual. Voltar ao funil limpa o campo e, se havia preview, republica a página
+  (`republicar-preview`).
 - Do briefing: `perdido` (cliente desistiu) ou `aguardando_pendencias`
   (interesse confirmado — entrar aqui agenda a próxima ação pra 2 dias à
   frente). Marcar "Documentos recebidos" e preencher o "Sinal recebido (R$)"
