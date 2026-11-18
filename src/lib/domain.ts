@@ -472,7 +472,7 @@ export function isOpen(p: Prospect): boolean {
 /**
  * Cobranças permitidas em `contatado`; esgotadas e com o retorno vencido, o prospect é descartado.
  * Uma só: a abordagem vai por uma rede e a cobrança, 3 dias úteis depois, pela outra. Mesmo valor em
- * private.descartar_sem_resposta() (migração 20261117220000, que também grava lost_reason = sem_resposta) e em resumo-abordagem.mjs.
+ * private.descartar_sem_resposta() (migração 20261118120000, que também grava lost_reason = sem_resposta) e em resumo-abordagem.mjs.
  */
 export const MAX_COBRANCAS = 1
 
@@ -482,10 +482,49 @@ export function canEnterContatado(p: Pick<Prospect, 'status'>): boolean {
   return i !== -1 && i <= FUNNEL.indexOf('contatado')
 }
 
-/** Sem resposta: cobranças esgotadas e o retorno da última já passou (vencido há pelo menos 1 dia). */
-export function isCobrancaExpirada(p: Pick<Prospect, 'status' | 'contact_attempts' | 'next_action_at'>): boolean {
+/**
+ * Espera "sem interesse": o contatado respondeu que não quer, mas ainda pode mudar de ideia. Não há coluna
+ * própria: a marcação é este par de campos, e next_action_at guarda a data do encerramento automático.
+ */
+export function isEsperaSemInteresse(p: Pick<Prospect, 'status' | 'lost_reason'>): boolean {
+  return p.status === 'contatado' && p.lost_reason === 'sem_interesse'
+}
+
+/** Data de hoje em Brasília, seja qual for o fuso do navegador: é o "hoje" do job das 06h BRT. */
+export function todayInSaoPauloISO(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now)
+  const part = (type: string) => parts.find((x) => x.type === type)?.value
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
+/**
+ * Espera que chegou à data: encerra no próprio dia. Mesma regra de private.descartar_sem_resposta()
+ * (migração 20261118120000); `hoje` deve vir de todayInSaoPauloISO().
+ */
+export function isEsperaVencida(p: Pick<Prospect, 'status' | 'lost_reason' | 'next_action_at'>, hoje: string): boolean {
+  return isEsperaSemInteresse(p) && !!p.next_action_at && p.next_action_at <= hoje
+}
+
+/** Mesmas condições do job para apagar o preview ao encerrar uma espera. */
+export function esperaApagaPreview(p: Pick<Prospect, 'slug' | 'landing_page_url' | 'suspended_at' | 'service_ended_at'>): boolean {
+  return p.slug !== null && !!p.landing_page_url && p.suspended_at === null && p.service_ended_at === null
+}
+
+/** Cliente em espera mudando de status: a transição recalcula campos, então essa mudança não tem Desfazer. */
+export function saiDaEspera(previous: Pick<Prospect, 'status' | 'lost_reason'>, patch: ProspectUpdate): boolean {
+  return isEsperaSemInteresse(previous) && !!patch.status && patch.status !== previous.status
+}
+
+/** Sem resposta: cobranças esgotadas e o retorno da última já passou (vencido há pelo menos 1 dia). Quem está em espera encerra como perdido. */
+export function isCobrancaExpirada(p: Pick<Prospect, 'status' | 'lost_reason' | 'contact_attempts' | 'next_action_at'>): boolean {
   return (
     p.status === 'contatado' &&
+    !isEsperaSemInteresse(p) &&
     p.contact_attempts >= MAX_COBRANCAS &&
     !!p.next_action_at &&
     daysFromToday(p.next_action_at) < 0
@@ -498,6 +537,16 @@ export function discardPatch(p: Pick<Prospect, 'notes'>, note: string): Prospect
     status: 'descartado',
     next_action_at: null,
     notes: note ? (p.notes ? `${p.notes}\n\n${note}` : note) : p.notes,
+  }
+}
+
+/** Encerramento automático da espera: mesmo patch e mesma nota de private.descartar_sem_resposta() (migração 20261118120000). */
+export function encerrarEsperaPatch(p: Pick<Prospect, 'notes'>): ProspectUpdate {
+  return {
+    ...discardPatch(p, 'Encerrado automaticamente: respondeu sem interesse e o prazo de espera terminou.'),
+    status: 'perdido',
+    lost_reason: 'sem_interesse',
+    last_reminded_at: null,
   }
 }
 
@@ -570,6 +619,8 @@ export function statusTransitionPatch(
   }
   // Voltou ao funil (respondeu depois): o motivo da perda deixa de valer; o histórico fica em prospect_events.
   if (CLOSED.includes(previous.status) && !CLOSED.includes(patch.status)) merged.lost_reason = null
+  // Saiu da espera avançando no funil: a marcação acaba aqui. Para perdido/descartado o motivo continua valendo.
+  if (isEsperaSemInteresse(previous) && !CLOSED.includes(patch.status)) merged.lost_reason = null
   return merged
 }
 
@@ -610,7 +661,8 @@ export function vistoriaAchados(p: Pick<Prospect, 'vistoria_achados'>): Vistoria
 }
 
 export function buildQueue(prospects: Prospect[]): Queue {
-  const all = prospects.filter(isOpen)
+  // Quem está em espera "sem interesse" não pede ação: só aguarda o encerramento automático.
+  const all = prospects.filter((p) => isOpen(p) && !isEsperaSemInteresse(p))
   const hoje = todayISO()
   // Cada prospect aparece em uma lista só: quem está pronto para enviar fica
   // em "proposal", mesmo que tenha data de retorno vencida ou de hoje.

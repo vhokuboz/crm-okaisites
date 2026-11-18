@@ -2,13 +2,30 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { addBusinessDaysISO, addDaysISO } from './domain.ts'
-import { canContact, canCopyCobranca, canMarkIgnored, cobrancaMessage, canRepeat, contactPatch, ignoredPatch, matchesFilters, repeatPatch, snoozePatch } from './queueActions.ts'
+import { canContact, canCopyCobranca, canMarkIgnored, cobrancaMessage, canRepeat, contactPatch, ignoredPatch, matchesFilters, mudouDeIdeiaPatch, repeatPatch, semInteressePatch, snoozePatch } from './queueActions.ts'
 
 test('canMarkIgnored / ignoredPatch - só contatado, e vira perdido', () => {
-  assert.equal(canMarkIgnored({ status: 'contatado' }), true)
+  assert.equal(canMarkIgnored({ status: 'contatado', lost_reason: null }), true)
   for (const status of ['prototipado', 'negociando', 'perdido', 'descartado'] as const)
-    assert.equal(canMarkIgnored({ status }), false)
+    assert.equal(canMarkIgnored({ status, lost_reason: null }), false)
   assert.deepEqual(ignoredPatch(), { status: 'perdido', lost_reason: 'visualizou_sem_resposta' })
+})
+
+test('semInteressePatch - marca a espera e agenda 3 dias úteis, sem mudar o status', () => {
+  assert.deepEqual(semInteressePatch(), { lost_reason: 'sem_interesse', next_action_at: addBusinessDaysISO(3) })
+})
+
+test('mudouDeIdeiaPatch - limpa o motivo e dá novo retorno, sem mudar o status', () => {
+  assert.deepEqual(mudouDeIdeiaPatch(), { lost_reason: null, next_action_at: addBusinessDaysISO(3) })
+})
+
+test('espera sem interesse - não cobra, não registra contato nem marca como ignorado', () => {
+  const espera = { status: 'contatado' as const, lost_reason: 'sem_interesse' as const, next_action_at: addDaysISO(-1), contact_attempts: 0, tratamento: 'plural' as const, landing_page_url: 'u' }
+  assert.equal(canRepeat(espera), false)
+  assert.equal(canCopyCobranca(espera), false)
+  assert.equal(canContact(espera), false)
+  assert.equal(canMarkIgnored(espera), false)
+  assert.equal(canRepeat({ ...espera, lost_reason: null }), true)
 })
 
 test('snoozePatch - agenda a partir de hoje', () => {
@@ -29,11 +46,11 @@ test('contactPatch - depois do contato soma 3 dias e mantém o status', () => {
 })
 
 test('canRepeat - só contatado com retorno vencido ou de hoje e cobranças sobrando', () => {
-  assert.equal(canRepeat({ status: 'contatado', next_action_at: addDaysISO(-1), contact_attempts: 0 }), true)
-  assert.equal(canRepeat({ status: 'contatado', next_action_at: addDaysISO(-1), contact_attempts: 1 }), false)
-  assert.equal(canRepeat({ status: 'contatado', next_action_at: addDaysISO(2), contact_attempts: 0 }), false)
-  assert.equal(canRepeat({ status: 'prototipado', next_action_at: addDaysISO(-1), contact_attempts: 0 }), false)
-  assert.equal(canRepeat({ status: 'contatado', next_action_at: null, contact_attempts: 0 }), false)
+  assert.equal(canRepeat({ status: 'contatado', lost_reason: null, next_action_at: addDaysISO(-1), contact_attempts: 0 }), true)
+  assert.equal(canRepeat({ status: 'contatado', lost_reason: null, next_action_at: addDaysISO(-1), contact_attempts: 1 }), false)
+  assert.equal(canRepeat({ status: 'contatado', lost_reason: null, next_action_at: addDaysISO(2), contact_attempts: 0 }), false)
+  assert.equal(canRepeat({ status: 'prototipado', lost_reason: null, next_action_at: addDaysISO(-1), contact_attempts: 0 }), false)
+  assert.equal(canRepeat({ status: 'contatado', lost_reason: null, next_action_at: null, contact_attempts: 0 }), false)
 })
 
 test('repeatPatch - soma tentativa e agenda 3 dias úteis', () => {
@@ -53,9 +70,9 @@ test('matchesFilters - ignora acento e caixa, e combina segmento e status', () =
 })
 
 test('canContact - triagem nao registra contato; as demais etapas sim', () => {
-  assert.equal(canContact({ status: 'triagem' }), false)
-  assert.equal(canContact({ status: 'prototipado' }), true)
-  assert.equal(canContact({ status: 'contatado' }), true)
+  assert.equal(canContact({ status: 'triagem', lost_reason: null }), false)
+  assert.equal(canContact({ status: 'prototipado', lost_reason: null }), true)
+  assert.equal(canContact({ status: 'contatado', lost_reason: null }), true)
 })
 
 test('cobrancaMessage - singular usa o primeiro nome, plural usa o nome do espaço', () => {
@@ -69,7 +86,7 @@ test('cobrancaMessage - singular usa o primeiro nome, plural usa o nome do espa�
 })
 
 test('canCopyCobranca - exige retorno vencido, tratamento e link', () => {
-  const ok = { status: 'contatado' as const, next_action_at: addDaysISO(-1), contact_attempts: 0, tratamento: 'plural' as const, landing_page_url: 'u' }
+  const ok = { status: 'contatado' as const, lost_reason: null, next_action_at: addDaysISO(-1), contact_attempts: 0, tratamento: 'plural' as const, landing_page_url: 'u' }
   assert.equal(canCopyCobranca(ok), true)
   assert.equal(canCopyCobranca({ ...ok, next_action_at: addDaysISO(2) }), false)
   assert.equal(canCopyCobranca({ ...ok, tratamento: null }), false)
@@ -81,6 +98,7 @@ import { abordagemKind, abordagemPatch, abordagemText, availableChannels, instag
 
 const base = {
   status: 'prototipado' as const,
+  lost_reason: null,
   next_action_at: null,
   contact_attempts: 0,
   tratamento: 'singular' as const,
@@ -101,6 +119,7 @@ test('abordagemKind - abordagem no prototipado, cobrança no contatado vencido, 
   assert.equal(abordagemKind(cobr), 'cobranca')
   assert.equal(abordagemKind({ ...cobr, next_action_at: addDaysISO(2) }), null)
   assert.equal(abordagemKind({ ...cobr, contact_attempts: 1 }), null)
+  assert.equal(abordagemKind({ ...cobr, lost_reason: 'sem_interesse' }), null)
 })
 
 test('abordagemText - cobrança usa a mensagem de follow-up', () => {

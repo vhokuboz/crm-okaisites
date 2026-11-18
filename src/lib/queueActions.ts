@@ -1,4 +1,4 @@
-import { MAX_COBRANCAS, addBusinessDaysISO, addDaysISO, daysFromToday, instagramHandle, whatsappUrl } from './domain.ts'
+import { MAX_COBRANCAS, addBusinessDaysISO, addDaysISO, daysFromToday, instagramHandle, isEsperaSemInteresse, whatsappUrl } from './domain.ts'
 import type { ContactChannel, Prospect, ProspectUpdate } from './database.types.ts'
 
 /** Adiar um prospect: a nova data de retorno, a partir de hoje. */
@@ -12,9 +12,12 @@ export function snoozePatch(days: number): ProspectUpdate {
   return { next_action_at: addDaysISO(days) }
 }
 
-/** Em triagem o prospect ainda esta sendo avaliado: nao se registra contato (nem se pula o protótipo). */
-export function canContact(p: Pick<Prospect, 'status'>): boolean {
-  return p.status !== 'triagem'
+/**
+ * Em triagem o prospect ainda esta sendo avaliado: nao se registra contato (nem se pula o protótipo).
+ * Em espera "sem interesse" também não: registrar contato empurraria a data do encerramento.
+ */
+export function canContact(p: Pick<Prospect, 'status' | 'lost_reason'>): boolean {
+  return p.status !== 'triagem' && !isEsperaSemInteresse(p)
 }
 
 /**
@@ -29,10 +32,11 @@ export function contactPatch(p: Pick<Prospect, 'status'>, now = new Date()): Pro
   }
 }
 
-/** "Cobrei de novo": só faz sentido para quem já foi contatado, com o retorno vencido e cobranças sobrando. */
-export function canRepeat(p: Pick<Prospect, 'status' | 'next_action_at' | 'contact_attempts'>): boolean {
+/** "Cobrei de novo": só faz sentido para quem já foi contatado, com o retorno vencido e cobranças sobrando. Nunca durante a espera "sem interesse". */
+export function canRepeat(p: Pick<Prospect, 'status' | 'lost_reason' | 'next_action_at' | 'contact_attempts'>): boolean {
   return (
     p.status === 'contatado' &&
+    !isEsperaSemInteresse(p) &&
     p.contact_attempts < MAX_COBRANCAS &&
     !!p.next_action_at &&
     daysFromToday(p.next_action_at) <= 0
@@ -47,16 +51,29 @@ export function repeatPatch(p: Pick<Prospect, 'contact_attempts'>): ProspectUpda
  * "Visualizou e não respondeu": viu a abordagem e deixou o prazo passar. Cobrar pela outra rede
  * não muda isso, então vai direto para perdido (a transição limpa a data de retorno e o lembrete).
  */
-export function canMarkIgnored(p: Pick<Prospect, 'status'>): boolean {
-  return p.status === 'contatado'
+export function canMarkIgnored(p: Pick<Prospect, 'status' | 'lost_reason'>): boolean {
+  return p.status === 'contatado' && !isEsperaSemInteresse(p)
 }
 
 export function ignoredPatch(): ProspectUpdate {
   return { status: 'perdido', lost_reason: 'visualizou_sem_resposta' }
 }
 
+/**
+ * "Respondeu sem interesse": entra na espera de 3 dias úteis antes do encerramento automático.
+ * A data sempre é sobrescrita, mesmo que já houvesse um retorno marcado.
+ */
+export function semInteressePatch(): ProspectUpdate {
+  return { lost_reason: 'sem_interesse', next_action_at: addBusinessDaysISO(3) }
+}
+
+/** "Mudou de ideia": sai da espera e continua em contatado, com novo retorno. */
+export function mudouDeIdeiaPatch(): ProspectUpdate {
+  return { lost_reason: null, next_action_at: addBusinessDaysISO(3) }
+}
+
 /** Botão "Copiar cobrança": contatado com retorno vencido e já classificado como singular/plural. */
-export function canCopyCobranca(p: Pick<Prospect, 'status' | 'next_action_at' | 'contact_attempts' | 'tratamento' | 'landing_page_url'>): boolean {
+export function canCopyCobranca(p: Pick<Prospect, 'status' | 'lost_reason' | 'next_action_at' | 'contact_attempts' | 'tratamento' | 'landing_page_url'>): boolean {
   return canRepeat(p) && !!p.tratamento && !!p.landing_page_url
 }
 
@@ -107,6 +124,7 @@ export const CHANNEL_LABEL: Record<ContactChannel, string> = {
 type AbordarFields = Pick<
   Prospect,
   | 'status'
+  | 'lost_reason'
   | 'next_action_at'
   | 'contact_attempts'
   | 'tratamento'

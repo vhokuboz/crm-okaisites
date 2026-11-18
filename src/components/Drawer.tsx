@@ -18,6 +18,7 @@ import {
   inactivityRisk,
   instagramHandle,
   instagramUrl,
+  isEsperaSemInteresse,
   lastSocialActivityLabel,
   linkBioUrl,
   parsePhones,
@@ -26,7 +27,15 @@ import {
   websiteUrl,
   whatsappUrl,
 } from '../lib/domain'
-import { repeatPatch, snoozePatch } from '../lib/queueActions'
+import { mudouDeIdeiaPatch, repeatPatch, semInteressePatch, snoozePatch } from '../lib/queueActions'
+import {
+  draftFromProspect,
+  draftValues,
+  editedFields,
+  editedPatch,
+  rebaseDraft,
+  type DrawerDraft,
+} from '../lib/drawerDraft'
 import { buildContractFieldMap, type ContractFormValues } from '../lib/contract'
 import {
   SERVICE_LABEL,
@@ -153,32 +162,74 @@ export function Drawer({ prospect: p, prospects, onUpdate, onReload, onClose }: 
   const [discardOpen, setDiscardOpen] = useState(false)
   const [serviceModalOpen, setServiceModalOpen] = useState(false)
 
-  // Só reseta o rascunho inteiro ao trocar de prospect (drawer aberto pra
-  // outra ficha) -- nunca em resposta a um campo de p.* mudando por baixo
-  // (ex. "Cobrei de novo" fazendo onUpdate direto), senão qualquer digitação
-  // não salva em notes/approach/etc. some silenciosamente.
+  // `base` é o registro como o rascunho o conhece: o que difere dela é edição do usuário.
+  const [base, setBase] = useState(() => draftFromProspect(p))
+  const draft: DrawerDraft = {
+    name,
+    segment,
+    city,
+    notes,
+    approach,
+    email,
+    landing,
+    whatsapp,
+    status,
+    nextAction,
+    dealValue,
+    monthlyFee,
+    docsReceived,
+    depositPaidAmount,
+    finalPaidAmount,
+  }
+
+  function applyDraft(d: DrawerDraft) {
+    setName(d.name)
+    setSegment(d.segment)
+    setCity(d.city)
+    setNotes(d.notes)
+    setApproach(d.approach)
+    setEmail(d.email)
+    setLanding(d.landing)
+    setWhatsapp(d.whatsapp)
+    setStatus(d.status)
+    setNextAction(d.nextAction)
+    setDealValue(d.dealValue)
+    setMonthlyFee(d.monthlyFee)
+    setDocsReceived(d.docsReceived)
+    setDepositPaidAmount(d.depositPaidAmount)
+    setFinalPaidAmount(d.finalPaidAmount)
+  }
+
   function loadDraft(src: Prospect) {
-    setName(src.name)
-    setSegment(src.segment)
-    setCity(src.city)
+    const loaded = draftFromProspect(src)
+    setBase(loaded)
+    applyDraft(loaded)
     setEditingHeader(false)
-    setNotes(src.notes ?? '')
-    setApproach(src.approach_message ?? '')
-    setEmail(src.email ?? '')
-    setLanding(src.landing_page_url ?? '')
-    setWhatsapp(src.whatsapp ?? '')
     setEditingWhatsapp(false)
-    setStatus(src.status)
-    setNextAction(src.next_action_at ?? '')
-    setDealValue(src.deal_value?.toString() ?? '')
-    setMonthlyFee(src.monthly_fee?.toString() ?? '')
-    setDocsReceived(src.docs_received)
-    setDepositPaidAmount(src.deposit_paid_amount?.toString() ?? '')
-    setFinalPaidAmount(src.final_paid_amount?.toString() ?? '')
     setSocialDrafts([])
     setEditingSocial({})
   }
-  useEffect(() => loadDraft(p), [p.id])
+
+  // Só reseta o rascunho inteiro ao trocar de prospect (drawer aberto pra outra
+  // ficha). Com o registro mudando por baixo (outra aba, job, "Cobrei de novo"),
+  // campo sem edição acompanha o valor novo e o que foi digitado não se perde.
+  const loadedId = useRef(p.id)
+  // A gravação é otimista: enquanto o Salvar não volta, `p` já traz o rascunho. Acompanhar isso faria
+  // uma gravação recusada levar embora o que foi digitado.
+  const saving = useRef(false)
+  const [rebaseTick, setRebaseTick] = useState(0)
+  useEffect(() => {
+    if (loadedId.current !== p.id) {
+      loadedId.current = p.id
+      loadDraft(p)
+      return
+    }
+    if (saving.current) return
+    const incoming = draftFromProspect(p)
+    if (editedFields(incoming, base).length === 0) return
+    applyDraft(rebaseDraft(draft, base, incoming))
+    setBase(incoming)
+  }, [p, rebaseTick])
 
   // Depois de salvar, o registro volta do banco normalizado (trim, número
   // reformatado, status promovido por transição). Recarregar o rascunho dele
@@ -187,13 +238,6 @@ export function Drawer({ prospect: p, prospects, onUpdate, onReload, onClose }: 
   useEffect(() => {
     if (syncTick > 0) loadDraft(p)
   }, [syncTick])
-
-  // "Cobrei de novo" atualiza p.next_action_at direto (sem passar pelo Salvar),
-  // então esse campo precisa continuar refletindo o valor persistido -- sem
-  // arrastar o resto do rascunho junto, ao contrário do efeito acima.
-  useEffect(() => {
-    setNextAction(p.next_action_at ?? '')
-  }, [p.next_action_at])
 
   // Com o ImagePreviewModal, o ContractModal ou o DiscardModal abertos por
   // cima, o Escape deles tem que fechar só o modal -- não borbulhar pra cá e
@@ -252,21 +296,7 @@ export function Drawer({ prospect: p, prospects, onUpdate, onReload, onClose }: 
   }
 
   const dirty =
-    name !== p.name ||
-    segment !== p.segment ||
-    city !== p.city ||
-    notes !== (p.notes ?? '') ||
-    approach !== (p.approach_message ?? '') ||
-    email !== (p.email ?? '') ||
-    landing !== (p.landing_page_url ?? '') ||
-    whatsapp !== (p.whatsapp ?? '') ||
-    status !== p.status ||
-    nextAction !== (p.next_action_at ?? '') ||
-    dealValue !== (p.deal_value?.toString() ?? '') ||
-    monthlyFee !== (p.monthly_fee?.toString() ?? '') ||
-    docsReceived !== p.docs_received ||
-    depositPaidAmount !== (p.deposit_paid_amount?.toString() ?? '') ||
-    finalPaidAmount !== (p.final_paid_amount?.toString() ?? '') ||
+    editedFields(draft, base).length > 0 ||
     socialDrafts.some((d) => d.value.trim()) ||
     Object.keys(editingSocial).length > 0
   dirtyRef.current = dirty
@@ -373,24 +403,17 @@ export function Drawer({ prospect: p, prospects, onUpdate, onReload, onClose }: 
     setEditingHeader(false)
   }
 
+  const emEspera = isEsperaSemInteresse(p)
+
+  /** Botões que gravam uma data na hora: ela substitui o que estiver digitado no campo, mesmo se a data gravada não mudar. */
+  async function gravarData(patch: ProspectUpdate, label?: string) {
+    if (await onUpdate(p.id, patch, label)) setNextAction(patch.next_action_at ?? '')
+  }
+
   async function saveText() {
-    const patch: ProspectUpdate = {
-      name: name.trim() || p.name,
-      segment: segment.trim() || p.segment,
-      city: city.trim() || p.city,
-      notes: notes || null,
-      approach_message: approach || null,
-      email: email.trim() || null,
-      landing_page_url: landing.trim() || null,
-      whatsapp: whatsapp.trim() || null,
-      status,
-      next_action_at: nextAction || null,
-      deal_value: dealValue.trim() ? Number(dealValue) : null,
-      monthly_fee: monthlyFee.trim() ? Number(monthlyFee) : null,
-      docs_received: docsReceived,
-      deposit_paid_amount: depositPaidAmount.trim() ? Number(depositPaidAmount) : null,
-      final_paid_amount: finalPaidAmount.trim() ? Number(finalPaidAmount) : null,
-    }
+    // As regras automáticas leem o rascunho inteiro; o banco só recebe o que foi editado.
+    const values = draftValues(draft, p)
+    const patch = editedPatch(draft, base, values)
     for (const d of socialDrafts) {
       const value = d.value.trim()
       if (value) patch[d.field] = normalizeSocialValue(d.field, value)
@@ -404,30 +427,34 @@ export function Drawer({ prospect: p, prospects, onUpdate, onReload, onClose }: 
     // seria uma segunda etapa fácil de esquecer. Só dispara a partir de
     // "triagem" (não de "novo") pra garantir que todo prospect passou pela
     // curadoria manual antes de virar prototipado.
-    if (patch.landing_page_url && status === 'triagem') patch.status = 'prototipado'
+    if (values.landing_page_url && status === 'triagem') patch.status = 'prototipado'
     // Mesma ideia: documentos + sinal recebidos é o próprio sinal de que dá
     // pra começar o refinamento. Pagamento final registrado fecha o card.
     if (
       status === 'aguardando_pendencias' &&
-      patch.docs_received &&
-      patch.deposit_paid_amount &&
-      (patch.docs_received !== p.docs_received || patch.deposit_paid_amount !== p.deposit_paid_amount)
+      values.docs_received &&
+      values.deposit_paid_amount &&
+      (values.docs_received !== p.docs_received || values.deposit_paid_amount !== p.deposit_paid_amount)
     ) {
       patch.status = 'refinamento'
     }
     if (
       status === 'aguardando_pagamento' &&
-      patch.final_paid_amount &&
-      patch.final_paid_amount !== p.final_paid_amount
+      values.final_paid_amount &&
+      values.final_paid_amount !== p.final_paid_amount
     ) {
       patch.status = 'finalizado'
     }
 
+    saving.current = true
     const ok = await onUpdate(p.id, patch)
+    saving.current = false
     if (ok) {
       setSaved(true)
       setSyncTick((t) => t + 1)
       setTimeout(() => setSaved(false), 1800)
+    } else {
+      setRebaseTick((t) => t + 1)
     }
   }
   saveTextRef.current = saveText
@@ -615,16 +642,44 @@ export function Drawer({ prospect: p, prospects, onUpdate, onReload, onClose }: 
             </Field>
           </section>
 
-          {((p.status === 'contatado' && p.contact_attempts < MAX_COBRANCAS) || p.status === 'aguardando_pendencias') && (
+          {p.status === 'contatado' && (
+            <section>
+              <h3 className="section-title">Resposta do cliente</h3>
+              {emEspera ? (
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <p className="text-body text-seal-ink">
+                    Sem interesse · encerra em {formatDateBR(p.next_action_at).slice(0, 5)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void gravarData(mudouDeIdeiaPatch(), 'Espera cancelada: novo retorno agendado')}
+                    className="rounded-sm border border-rule px-3 py-1.5 text-body hover:bg-card"
+                  >
+                    Mudou de ideia
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void gravarData(semInteressePatch(), 'Marcado como sem interesse')}
+                  className="mt-2 rounded-sm border border-seal/40 px-3 py-1.5 text-body text-seal-ink hover:bg-seal/10"
+                >
+                  Respondeu sem interesse
+                </button>
+              )}
+            </section>
+          )}
+
+          {((p.status === 'contatado' && !emEspera && p.contact_attempts < MAX_COBRANCAS) || p.status === 'aguardando_pendencias') && (
             <section>
               <h3 className="section-title">Cobrei de novo</h3>
               <button
                 type="button"
                 onClick={() => {
                   if (p.status === 'contatado') {
-                    void onUpdate(p.id, repeatPatch(p), 'Nova cobrança registrada')
+                    void gravarData(repeatPatch(p), 'Nova cobrança registrada')
                   } else {
-                    void onUpdate(p.id, snoozePatch(2))
+                    void gravarData(snoozePatch(2))
                   }
                 }}
                 className="rounded-sm border border-rule px-3 py-1.5 text-body hover:bg-card"
@@ -672,11 +727,11 @@ export function Drawer({ prospect: p, prospects, onUpdate, onReload, onClose }: 
             <div className="grid grid-cols-2 gap-4">
               <label className="block">
                 <span className="text-xs text-muted">Valor combinado (R$)</span>
-                <CurrencyInput value={dealValue} onChange={setDealValue} placeholder="0,00" />
+                <CurrencyInput key={base.dealValue} value={dealValue} onChange={setDealValue} placeholder="0,00" />
               </label>
               <label className="block">
                 <span className="text-xs text-muted">Mensalidade (R$)</span>
-                <CurrencyInput value={monthlyFee} onChange={setMonthlyFee} placeholder="Sem hospedagem com a gente" />
+                <CurrencyInput key={base.monthlyFee} value={monthlyFee} onChange={setMonthlyFee} placeholder="Sem hospedagem com a gente" />
               </label>
             </div>
             <label className="flex items-center gap-2 text-body">
@@ -690,11 +745,11 @@ export function Drawer({ prospect: p, prospects, onUpdate, onReload, onClose }: 
             <div className="grid grid-cols-2 gap-4">
               <label className="block">
                 <span className="text-xs text-muted">Sinal recebido (R$)</span>
-                <CurrencyInput value={depositPaidAmount} onChange={setDepositPaidAmount} placeholder="0,00" />
+                <CurrencyInput key={base.depositPaidAmount} value={depositPaidAmount} onChange={setDepositPaidAmount} placeholder="0,00" />
               </label>
               <label className="block">
                 <span className="text-xs text-muted">Pagamento final (R$)</span>
-                <CurrencyInput value={finalPaidAmount} onChange={setFinalPaidAmount} placeholder="0,00" />
+                <CurrencyInput key={base.finalPaidAmount} value={finalPaidAmount} onChange={setFinalPaidAmount} placeholder="0,00" />
               </label>
             </div>
           </section>

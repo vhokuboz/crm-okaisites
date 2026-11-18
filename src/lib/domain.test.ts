@@ -16,7 +16,13 @@ import {
   statusTransitionPatch,
   canEnterContatado,
   discardPatch,
+  encerrarEsperaPatch,
+  esperaApagaPreview,
   isCobrancaExpirada,
+  isEsperaSemInteresse,
+  isEsperaVencida,
+  saiDaEspera,
+  todayInSaoPauloISO,
 } from './domain.ts'
 import type { Prospect } from './database.types.ts'
 
@@ -243,12 +249,85 @@ test('canEnterContatado - só quem ainda não passou de contatado', () => {
 })
 
 test('isCobrancaExpirada - 1 cobrança e retorno já passado', () => {
-  const base = { status: 'contatado', contact_attempts: 1, next_action_at: addDaysISO(-1) } as const
+  const base = { status: 'contatado', lost_reason: null, contact_attempts: 1, next_action_at: addDaysISO(-1) } as const
   assert.equal(isCobrancaExpirada(base), true)
   assert.equal(isCobrancaExpirada({ ...base, next_action_at: addDaysISO(0) }), false)
   assert.equal(isCobrancaExpirada({ ...base, contact_attempts: 0 }), false)
   assert.equal(isCobrancaExpirada({ ...base, status: 'briefing' }), false)
   assert.equal(isCobrancaExpirada({ ...base, next_action_at: null }), false)
+  assert.equal(isCobrancaExpirada({ ...base, lost_reason: 'sem_interesse' }), false)
+})
+
+test('isEsperaSemInteresse - só contatado com o motivo sem_interesse', () => {
+  assert.equal(isEsperaSemInteresse({ status: 'contatado', lost_reason: 'sem_interesse' }), true)
+  assert.equal(isEsperaSemInteresse({ status: 'contatado', lost_reason: null }), false)
+  assert.equal(isEsperaSemInteresse({ status: 'perdido', lost_reason: 'sem_interesse' }), false)
+})
+
+test('isEsperaVencida - encerra no próprio dia e depois dele', () => {
+  const espera = { status: 'contatado', lost_reason: 'sem_interesse' } as const
+  const hoje = '2026-11-18'
+  assert.equal(isEsperaVencida({ ...espera, next_action_at: '2026-11-17' }, hoje), true)
+  assert.equal(isEsperaVencida({ ...espera, next_action_at: hoje }, hoje), true)
+  assert.equal(isEsperaVencida({ ...espera, next_action_at: '2026-11-19' }, hoje), false)
+  assert.equal(isEsperaVencida({ ...espera, next_action_at: null }, hoje), false)
+  assert.equal(isEsperaVencida({ status: 'contatado', lost_reason: null, next_action_at: '2026-11-17' }, hoje), false)
+})
+
+test('todayInSaoPauloISO - o dia vira à meia-noite de Brasília, em qualquer fuso do navegador', () => {
+  // 22h30 BRT do dia 18: em Lisboa já é dia 19.
+  assert.equal(todayInSaoPauloISO(new Date('2026-11-19T01:30:00Z')), '2026-11-18')
+  assert.equal(todayInSaoPauloISO(new Date('2026-11-19T02:59:59Z')), '2026-11-18')
+  assert.equal(todayInSaoPauloISO(new Date('2026-11-19T03:00:00Z')), '2026-11-19')
+  const espera = { status: 'contatado', lost_reason: 'sem_interesse', next_action_at: '2026-11-19' } as const
+  assert.equal(isEsperaVencida(espera, todayInSaoPauloISO(new Date('2026-11-19T01:30:00Z'))), false)
+})
+
+test('esperaApagaPreview - mesmas condições do job', () => {
+  const ok = { slug: 's', landing_page_url: 'https://x.pages.dev', suspended_at: null, service_ended_at: null }
+  assert.equal(esperaApagaPreview(ok), true)
+  assert.equal(esperaApagaPreview({ ...ok, slug: null }), false)
+  assert.equal(esperaApagaPreview({ ...ok, landing_page_url: null }), false)
+  assert.equal(esperaApagaPreview({ ...ok, landing_page_url: '' }), false)
+  assert.equal(esperaApagaPreview({ ...ok, suspended_at: '2026-11-01' }), false)
+  assert.equal(esperaApagaPreview({ ...ok, service_ended_at: '2026-11-01' }), false)
+})
+
+test('saiDaEspera - só mudança de status de quem está em espera', () => {
+  const espera = { status: 'contatado', lost_reason: 'sem_interesse' } as const
+  assert.equal(saiDaEspera(espera, { status: 'briefing' }), true)
+  assert.equal(saiDaEspera(espera, { status: 'perdido' }), true)
+  assert.equal(saiDaEspera(espera, { status: 'contatado', notes: 'x' }), false)
+  assert.equal(saiDaEspera(espera, { lost_reason: null, next_action_at: '2026-11-23' }), false)
+  assert.equal(saiDaEspera({ status: 'contatado', lost_reason: null }, { status: 'briefing' }), false)
+})
+
+test('encerrarEsperaPatch - perdido, mantém o motivo, limpa as datas e anexa a nota', () => {
+  const nota = 'Encerrado automaticamente: respondeu sem interesse e o prazo de espera terminou.'
+  assert.deepEqual(encerrarEsperaPatch({ notes: 'a' }), {
+    status: 'perdido',
+    lost_reason: 'sem_interesse',
+    next_action_at: null,
+    last_reminded_at: null,
+    notes: `a\n\n${nota}`,
+  })
+  assert.equal(encerrarEsperaPatch({ notes: null }).notes, nota)
+})
+
+test('statusTransitionPatch - avançar no funil limpa a espera; encerrar mantém o motivo', () => {
+  const espera = { ...fakeProspect('contatado'), lost_reason: 'sem_interesse' as const }
+  assert.equal(statusTransitionPatch(espera, { status: 'briefing' }).lost_reason, null)
+  assert.equal(statusTransitionPatch(espera, { status: 'perdido' }).lost_reason, undefined)
+  assert.equal(statusTransitionPatch(espera, { status: 'descartado' }).lost_reason, undefined)
+  assert.equal(statusTransitionPatch(espera, { status: 'contatado', notes: 'x' }).lost_reason, undefined)
+})
+
+test('buildQueue - quem está em espera não aparece em nenhuma lista', () => {
+  const espera = { ...fakeProspect('contatado'), id: 'e', lost_reason: 'sem_interesse' as const, next_action_at: addDaysISO(0) }
+  const normal = { ...fakeProspect('contatado'), id: 'n', lost_reason: null, next_action_at: addDaysISO(0) }
+  const q = buildQueue([espera, normal])
+  assert.deepEqual(q.today.map((p) => p.id), ['n'])
+  assert.equal(q.overdue.length + q.unscheduled.length + q.proposal.length + q.review.length, 0)
 })
 
 test('discardPatch - anexa a nota às notas existentes', () => {

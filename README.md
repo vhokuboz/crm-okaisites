@@ -64,6 +64,16 @@ ou pela ficha):
   registra o motivo da perda para tracking; nulo = desconhecido ou descarte
   manual. Voltar ao funil limpa o campo e, se havia preview, republica a página
   (`republicar-preview`).
+- **Espera "sem interesse"**: o botão **"Respondeu sem interesse"** da ficha
+  mantém o cliente em `contatado` com `lost_reason = 'sem_interesse'` (essa
+  combinação é a marcação; não há coluna própria) e põe em `next_action_at` a
+  data do encerramento, 3 dias úteis à frente. Durante a espera ele sai da fila
+  do dia, não recebe cobrança nem entra no descarte automático, e a data não
+  pode ser apagada pela ficha. **"Mudou de ideia"** limpa o motivo e agenda novo
+  retorno; mover para outra etapa aberta do funil também limpa. Na data, às 06h
+  BRT, `private.descartar_sem_resposta()` marca `perdido`, mantém o motivo,
+  anexa uma nota e apaga o preview; o app repete a regra na primeira carga, como
+  reserva do cron.
 - Do briefing: `perdido` (cliente desistiu) ou `aguardando_pendencias`
   (interesse confirmado — entrar aqui agenda a próxima ação pra 2 dias à
   frente). Marcar "Documentos recebidos" e preencher o "Sinal recebido (R$)"

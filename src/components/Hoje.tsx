@@ -7,6 +7,7 @@ import {
   buildQueue,
   byOpportunity,
   daysFromToday,
+  isEsperaSemInteresse,
   isOpen,
   readGap,
 } from '../lib/domain'
@@ -332,7 +333,7 @@ export function Hoje({ prospects, onUpdate, onUpdateMany, onOpen }: Props) {
               <button
                 key={o.days}
                 disabled={selected.length === 0}
-                onClick={() => void bulk(`Adiado: ${o.label.toLowerCase()}`, () => snoozePatch(o.days))}
+                onClick={() => void bulk(`Adiado: ${o.label.toLowerCase()}`, () => snoozePatch(o.days), (p) => !isEsperaSemInteresse(p))}
                 className="hit min-h-10 rounded-sm border border-cream/30 px-3 text-body hover:bg-cream/10 disabled:opacity-40"
               >
                 Adiar: {o.label.toLowerCase()}

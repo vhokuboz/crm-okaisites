@@ -176,7 +176,10 @@ export type ProspectStatus = Database['public']['Enums']['prospect_status']
 
 /** Canal do contato registrado; a cobrança sugere o outro. */
 export type ContactChannel = 'whatsapp' | 'instagram' | 'email'
-/** Motivo da perda/descarte (check da migração 20261117220000). sem_resposta = descarte automático. Nulo = desconhecido ou manual. */
+/**
+ * Motivo da perda/descarte (check da migração 20261117220000). sem_resposta = descarte automático. Nulo = desconhecido ou manual.
+ * sem_interesse em quem ainda está em `contatado` marca a espera antes do encerramento (isEsperaSemInteresse, em domain.ts).
+ */
 export type LostReason = 'visualizou_sem_resposta' | 'sem_interesse' | 'sem_resposta'
 
 /** Achado da vistoria automática do preview (agent-okaisites/prospeccao/scripts/vistoria-abordagem.mjs). */
