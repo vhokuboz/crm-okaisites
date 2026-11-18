@@ -105,12 +105,17 @@ export function AbordarPanel({
     }
   }
 
-  async function abrir(channel: ContactChannel) {
-    const url = channel === 'whatsapp' ? whatsappUrl(p, text) : instagramDmUrl(p.instagram)
-    if (!url) return
-    // Copia antes de abrir: com a aba nova em foco, a escrita na área de transferência é recusada.
+  function urlDoCanal(channel: ContactChannel): string | null {
+    return channel === 'whatsapp' ? whatsappUrl(p, text) : instagramDmUrl(p.instagram)
+  }
+
+  /*
+    Roda no clique do link, que é quem abre a conversa. A cópia começa aqui, antes
+    de a aba nova tomar o foco, mas o clique não a espera: window.open depois de um
+    await perde o gesto do usuário e o Safari bloqueia a aba.
+  */
+  async function aoAbrir(channel: ContactChannel) {
     const copiou = channel === 'whatsapp' ? await copiarPrint() : await copiarTexto()
-    const aba = window.open(url, '_blank', 'noopener,noreferrer')
     if (channel === 'whatsapp')
       setAviso(
         copiou
@@ -123,7 +128,6 @@ export function AbordarPanel({
           ? 'Mensagem copiada: cole na conversa e anexe o print com "Copiar print".'
           : 'Instagram aberto. Copie a mensagem e o print pelos botões abaixo.',
       )
-    if (!aba) setAviso(`O navegador bloqueou a aba nova. Abra: ${url}`)
   }
 
   async function registrar(channel: ContactChannel) {
@@ -178,17 +182,23 @@ export function AbordarPanel({
       )}
 
       <div className="grid grid-cols-2 gap-2">
-        {canais.map((c) => (
-          <button
-            key={c}
-            type="button"
-            onClick={() => void abrir(c)}
-            className={`${BTN} ${c === sugerido ? 'border-deep/40 bg-stage-1 text-deep' : ''}`}
-          >
-            <ChannelIcon channel={c} />
-            Abrir {CHANNEL_LABEL[c]}
-          </button>
-        ))}
+        {canais.map((c) => {
+          const url = urlDoCanal(c)
+          if (!url) return null
+          return (
+            <a
+              key={c}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => void aoAbrir(c)}
+              className={`${BTN} ${c === sugerido ? 'border-deep/40 bg-stage-1 text-deep' : ''}`}
+            >
+              <ChannelIcon channel={c} />
+              Abrir {CHANNEL_LABEL[c]}
+            </a>
+          )
+        })}
         <button
           type="button"
           disabled={!blob}
